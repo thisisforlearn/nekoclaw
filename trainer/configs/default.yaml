@@ -1,0 +1,10 @@
+# NekoClaw trainer config — local CPU + Kaggle 2xT4
+data: ["data/train.bin"]
+output: "checkpoints"
+batch_size: 16384  # per GPU, so 32768 for 2xT4
+lr: 0.002
+epochs: 100
+max_steps: 1000000
+amp: true
+seed: 42
+save_every: 5000

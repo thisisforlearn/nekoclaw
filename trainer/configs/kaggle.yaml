@@ -1,0 +1,8 @@
+data: ["/kaggle/input/nekoclaw-data/train.bin"]
+output: "/kaggle/working/checkpoints"
+batch_size: 16384
+lr: 0.002
+epochs: 100
+amp: true
+seed: 42
+save_every: 2000

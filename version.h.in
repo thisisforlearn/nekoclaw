@@ -1,0 +1,5 @@
+#pragma once
+#define NEKOCLAW_VERSION "@PROJECT_VERSION@"
+#define NEKOCLAW_AUTHOR "Vaibhav"
+#define NEKOCLAW_NAME "NekoClaw"
+#define NEKOCLAW_LICENSE "AGPLv3 + Commercial"

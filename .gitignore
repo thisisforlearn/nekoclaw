@@ -1,0 +1,45 @@
+# Build
+build/
+build-*/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.nnue
+nekoclaw
+nekoclaw.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.train_cache/
+checkpoints/
+lightning_logs/
+wandb/
+
+# Data (keep structure, ignore giant binaries)
+*.bin
+*.pgn
+*.zst
+*.gz
+*.epd
+data/
+downloads/
+!weights/.gitkeep
+!trainer/configs/*.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.clangd/
+compile_commands.json
+
+# OS
+.DS_Store
+Thumbs.db

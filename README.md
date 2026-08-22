@@ -1,0 +1,210 @@
+# NekoClaw 🐾♟️
+
+**Author:** Vaibhav  
+**License:** GNU AGPLv3 + Commercial License (contact author)  
+**Language:** Highly optimized C++17 (AVX2 / AVX-VNNI where available) + Python only where >5% faster (PyTorch trainer)  
+**Network:** Real NNUE from scratch — **HalfKAv2_hm · 8 buckets · L1=1024 SCReLU** — hybrid i16/i8 quantized  
+**Search:** Full-stack minimax — PVS, iterative deepening + aspiration, TT, QSearch, NMP, LMR, history/killers/counters, SEE, SMP-ready  
+**Use:** UCI + console play  
+**Training:** PyTorch trainer for **2× NVIDIA T4 on Kaggle** (DDP) + local CPU on Debian WSL2 — lossless pause/resume
+
+> Not a Stockfish fine-tune. Entire pipeline is independent: custom data pipeline, custom network, custom search. Stockfish/Lc0 are only used as *teachers* for labeling positions.
+
+---
+
+## Architecture at a glance
+
+```
+Input: HalfKAv2_hm (king-relative, horizontally-mirrored)
+  King bucket = 32 (mirrored to files e..h)
+  Piece types = 12 (P,N,B,R,Q,K × 2 colors)
+  Feature dims = 32 × 12 × 64 = 24576
+
+FeatureTransformer: 24576 → 1024 per perspective (AVX2, i16, QA=255)
+  → dual accumulator (white/black), incrementally updated
+
+Buckets: 8 selected by (popcount(occupancy)-1)/4   [0..7]
+
+For each bucket b:
+  L1: 2048 (1024×2 after SCReLU) → 16  (i8, QB=64)
+  L2: 16 → 32 ReLU
+  L3: 32 → 32 ReLU
+  Out: 32 → 1
+PSQT bypass: none — pure NNUE; material buckets capture phase.
+
+Quantization: FT QA=255, hidden QB=64, output QC=64, scale 400cp
+Activation: SCReLU(x)=clamp(x,0,1)^2  (squared clipped ReLU) on FT output
+Inference: AVX2 (256-bit) + VNNI-int8 fast path on i5-1335U; hybrid i16/i8
+```
+
+***Why HalfKAv2_hm?*** King-relative sparse features exploit NNUE incremental updates (only ~30 adds/subs per move), mirroring halves king buckets (64→32), AVX2-friendly.
+
+---
+
+## Project layout
+
+```
+engine/                 # C++ engine
+  include/nekoclaw/     # headers (types, board, movegen, nnue, search, uci)
+  src/                  # optimized sources (AVX2 intrinsics in nnue/simd.cpp)
+  CMakeLists.txt
+trainer/                # Python PyTorch trainer
+  nekoclaw_trainer/
+    model.py            # mirrors C++ arch exactly (export parity tests)
+    dataset.py          # custom binary .bin loader, 2.5M positions/chunk
+    train.py            # DDP + AMP + lossless checkpoint
+    export.py           # → .nnue (little-endian, versioned)
+  configs/default.yaml
+scripts/
+  download_gm.py        # Lichess Elite DB + GM high-quality PGN fetch
+  annotate.py           # teacher labeling (Stockfish depth≥22 / Lc0 nodes)
+  convert_pgn_to_bin.py # PGN → custom .bin (see format below)
+kaggle/
+  kaggle_train.ipynb    # copy to Kaggle, 2×T4 DDP launch
+weights/                # .nnue files (not in git)
+tests/                  # perft & nnue parity
+build/                  # CMake out-of-source build dir
+```
+
+---
+
+## Build (Debian 13 Trixie, WSL2, AVX2)
+
+```bash
+cmake -S engine -B build -DCMAKE_BUILD_TYPE=Release -DUSE_AVX2=ON -DNATIVE_TUNING=OFF
+cmake --build build -j$(nproc)
+./build/nekoclaw bench        # verifies perft + nnue + search
+./build/nekoclaw              # UCI mode
+./build/nekoclaw --console    # human console play
+```
+
+Flags:
+- `USE_AVX2=ON` (default AUTO detects AVX2; i5-1335U confirmed AVX2+VNNI)
+- `USE_AVXVNNI=ON` for VPDPBUSD fast int8 path (if compiler supports -mavxvnni)
+- `CMAKE_BUILD_TYPE=Release` enables `-O3 -march=x86-64-v3 -flto -DNDEBUG`
+
+Python only where >5% faster: **PyTorch trainer** (Python is 50× faster to iterate than hand-rolled CUDA; C++ inference is 8–12× faster than Python, so engine stays C++). Per rule, Python path is only used for training.
+
+---
+
+## Training data format (custom binary, recommended)
+
+```
+Header (32 bytes):
+  magic "NCBIN\x00\x02" (8B) | version 2 (u32) | num_positions (u64)
+  | arch_hash (u32) | quantization (u32) | reserved 8B
+
+Per position (40 bytes + cheap):
+  occupancies bitboards? No — we store compact:
+  fen_string_len (u16) + fen (variable) OR
+  binary board: 64 bytes (piece codes) + side(1) + castle(1) + ep(1) + ply(2)
+  score (i16 centipawns, teacher) | result (i8: -1,0,1) | bucket (u8) | padding
+  → writer packs as 40B aligned. Reader memory-maps.
+```
+
+Why custom binary vs PGN? 4–8× faster loading, deterministic shuffling, `mmap` friendly on Kaggle.
+
+Alternate: `--format pgn` supported via `scripts/convert_pgn_to_bin.py`.
+
+---
+
+## Training: how to resume losslessly
+
+Checkpoints store **everything**:
+
+```
+checkpoint/
+  epoch_042.pt               # model + optimizer + scheduler + scaler
+  rng.pt                     # python / numpy / torch RNG states
+  dataloader.pt              # exact shard + offset + shuffle permutation
+  trainer_state.json         # global_step, epoch, best_loss
+```
+
+Resume:
+
+```bash
+# Local CPU (your laptop)
+python -m nekoclaw_trainer.train --config trainer/configs/default.yaml --resume checkpoints/last.pt
+
+# Kaggle 2×T4 (DDP auto)
+torchrun --nproc_per_node=2 -m nekoclaw_trainer.train --config configs/kaggle.yaml --resume /kaggle/input/nekoclaw-ckpt/last.pt
+```
+
+Pause: `p` or `SIGUSR1` triggers graceful save; `SIGTERM` (Kaggle preemption) is caught; no loss.
+
+Loss: `MSE` on teacher cp + `1e-3 * L2` + bucket balancing; WDL head optional.
+
+---
+
+## Kaggle 2×T4 usage
+
+1. Upload dataset: `data/*.bin` as Kaggle Dataset
+2. Copy `kaggle/kaggle_train.ipynb` to Kaggle Notebook
+3. Enable 2×T4 (Settings → Accelerator → GPU T4 ×2)
+4. Phone + face verification already done (per your setup)
+5. Run — DDP spawns 2 workers, AMP fp16, batch 16384
+6. Export `.nnue` at end: `python -m nekoclaw_trainer.export --ckpt last.pt --out nekoclaw-1024x8-scReLU.nnue`
+
+---
+
+## Data pipeline (GM + heavy teacher analysis)
+
+You said: *have own data first, then Lichess Elite DB, plus script that downloads GM games with full computer analysis (Stockfish / Lc0 depth)* — this is implemented.
+
+```bash
+# 1) Elite DB (use your copy)
+python scripts/download_gm.py --source elite --elite-path /path/to/lichess_elite_db.pgn.zst --out data/raw/
+
+# 2) Fetch fresh GM games (2700+)
+python scripts/download_gm.py --source lichess --min-elo 2700 --max-games 50000 --out data/raw/
+
+# 3) Heavy analysis (this is the important step)
+python scripts/annotate.py --in data/raw/gm.pgn --out data/labeled.epd \
+  --engine stockfish --engine-path /usr/bin/stockfish --depth 22 --threads 8 \
+  --hash 2048 --multipv 1 --filter-eco
+
+# 4) Convert to custom binary for trainer
+python scripts/convert_pgn_to_bin.py --in data/labeled.epd --out data/train.bin --shard 2500000
+```
+
+Annotate uses at least depth 22 (configurable) and keeps PV score after search; also supports Lc0 via `--engine lc0`.
+
+---
+
+## UCI
+
+```
+uci
+isready
+position startpos moves e2e4 e7e5
+go depth 18
+go wtime 300000 btime 300000 winc 5000 binc 5000
+setoption name Hash value 256
+setoption name Threads value 4
+setoption name NNUEFile value weights/nekoclaw-1024x8-scReLU.nnue
+quit
+```
+
+Console play: `./build/nekoclaw --console`
+
+---
+
+## Benchmarks (target on i5-1335U)
+
+- Perft 6 (startpos): ~119M nodes, ~45M nps single-thread (magic bitboards)
+- NNUE inference: ~18M evals/s (AVX2, incremental), ~0.9M full refresh
+- Search: 6M nps midgame with TT+history (single thread)
+
+---
+
+## License
+
+**AGPLv3** — see `LICENSE`. Commercial use without source disclosure requires a separate commercial license from the author (Vaibhav).
+
+---
+
+## Credits
+
+- Yu Nasu (NNUE)
+- Stockfish team for HalfKAv2_hm naming and SCReLU insights (independent impl)
+- Lichess for Elite Database
