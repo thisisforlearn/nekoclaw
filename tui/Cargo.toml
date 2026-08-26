@@ -1,0 +1,18 @@
+[package]
+name = "nekoclaw-tui"
+version = "1.0.0"
+edition = "2021"
+authors = ["Vaibhav"]
+license = "GPL-3.0-only"
+description = "NekoClaw clickable TUI for Linux/Win11/Termux - ratatui mouse"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+shakmaty = "0.29"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
