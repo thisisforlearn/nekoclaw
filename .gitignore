@@ -30,6 +30,7 @@ wandb/
 data/
 downloads/
 !weights/.gitkeep
+!weights/*.nnue
 !trainer/configs/*.yaml
 
 # IDE

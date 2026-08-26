@@ -58,6 +58,9 @@ class NekoBinDataset(IterableDataset):
         self.global_offset = offset
 
     def __iter__(self):
+        # Reset after full epoch (lossless resume should not skip next epoch)
+        if self.global_offset >= self.num_positions:
+            self.global_offset = 0
         # Deterministic shuffle per epoch — numpy fast path for 8M (0.2s vs 20s for Python random)
         if self.shuffle:
             rng = np.random.default_rng(self.seed + self.epoch)

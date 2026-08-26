@@ -772,9 +772,19 @@ fn main() -> io::Result<()> {
                                 } else {
                                     status="Nothing to undo".into();
                                 }
+                            } else if c == 'c' && input_buf.is_empty() {
+                                player_color = if player_color == ChessColor::White { ChessColor::Black } else { ChessColor::White };
+                                flipped = player_color == ChessColor::Black;
+                                status=format!("Play as {} — board flipped", if player_color==ChessColor::White {"White"} else {"Black"});
+                                if board.turn() != player_color && !board.is_game_over() {
+                                    status="Engine thinking...".into();
+                                    let fen = Fen::from_position(&board as &Chess, shakmaty::EnPassantMode::Legal).to_string();
+                                    let _ = engine_handle.as_ref().unwrap().tx.send(EngineCmd::Go { fen, depth: 12 });
+                                    engine_thinking=true;
+                                }
                             } else if c == 'f' && input_buf.is_empty() {
-                                // flip not implemented - placeholder
-                                status="Flip: board perspective toggle (TODO)".into();
+                                flipped = !flipped;
+                                status=format!("Board flipped: {}", if flipped {"Black at bottom"} else {"White at bottom"});
                             } else {
                                 // SAN typing: allow typical SAN chars
                                 // Include KQRBN for pieces, a-h, 1-8, x, =, -, O, +, #, !, ?
