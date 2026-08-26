@@ -9,7 +9,13 @@ import http.server, socketserver, urllib.parse, json, subprocess, pathlib, os
 import chess
 
 PORT=8080
-ENGINE="./build/nekoclaw"
+import argparse
+parser=argparse.ArgumentParser()
+parser.add_argument("--port", type=int, default=8080)
+parser.add_argument("--engine", default="./build/nekoclaw")
+args, _ = parser.parse_known_args()
+PORT=args.port
+ENGINE=args.engine
 
 # Start engine
 proc=None
@@ -111,7 +117,7 @@ async function render(){
   let s=await fetch('/status'); document.getElementById('status').innerText=await s.text();
   let p=await fetch('/proof'); document.getElementById('proof').innerText=await p.text();
 }
-let pieceSymbols={'P':'\u265F','N':'\u265E','B':'\u265D','R':'\u265C','Q':'\u265B','K':'\u265A','p':'\u2659','n':'\u2658','b':'\u2657','r':'\u2656','q':'\u2655','k':'\u2654'};
+let pieceSymbols={'P':'\u2659','N':'\u2658','B':'\u2657','R':'\u2656','Q':'\u2655','K':'\u2654','p':'\u265F','n':'\u265E','b':'\u265D','r':'\u265C','q':'\u265B','k':'\u265A'};
 async function click(sq){
   if(!selected){ selected=sq; document.getElementById('status').innerText='Selected '+sq; }
   else{
