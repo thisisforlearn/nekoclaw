@@ -39,10 +39,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path=="/":
             self.send_response(200)
-            self.send_header("Content-type","text/html")
+            self.send_header("Content-type","text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write("""
-<html><head><title>NekoClaw - the cutest chess engine</title>
+<html><head><meta charset="utf-8"><title>NekoClaw - the cutest chess engine</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body { font-family: 'Segoe UI', system-ui; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color:#eee; text-align:center; margin:0; padding:20px; }
