@@ -35,7 +35,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type","text/html")
             self.end_headers()
-            self.wfile.write(b"""
+            self.wfile.write("""
 <html><head><title>NekoClaw - the cutest chess engine</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
@@ -147,7 +147,7 @@ async function undo(){ await fetch('/undo'); loadBoard(); }
 setInterval(()=>{ let c=document.getElementById('cat'); c.innerText=c.innerText=='=^._.^='?'=^\u2022\u03c9\u2022^=':'=^._.^='; }, 600);
 loadBoard(); setInterval(loadBoard, 1000);
 </script></body></html>
-            """)
+            """.encode())
         elif self.path=="/fen":
             self.send_response(200); self.end_headers()
             self.wfile.write(board.fen().encode())
