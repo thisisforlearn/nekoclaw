@@ -185,7 +185,75 @@ setoption name NNUEFile value weights/nekoclaw-1024x8-scReLU.nnue
 quit
 ```
 
-Console play: `./build/nekoclaw --console`
+Console play: `./build/nekoclaw --console` (supports `e4`/`Nf3`/`O-O` or `e2e4`, click in TUI)
+
+TUI (clickable, Linux/Win11/Termux): `./tui/target/release/nekoclaw-tui` (`f` flip, `c` play as Black, `q` quit)
+
+Web (exotic OS, lichess-like): `python scripts/web_gui.py --port 8080` → `http://localhost:8080` (click, flip, pure NekoClaw proof at `/proof`)
+
+---
+
+## One-liners — for someone who never opened terminal (progress bar always at bottom, downloads pre-trained engine)
+
+**Linux Debian/Ubuntu:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/thisisforlearn/nekoclaw/main/install.sh | bash
+# Does: apt update, installs curl/git/rust if missing, tries precompiled nekoclaw-linux-x86_64 (curl --progress-bar) or builds from source (cargo spinner), downloads weights/nekoclaw-1024x8-scReLU.nnue (50MB), sets PATH
+```
+
+**Windows 11 (PowerShell as normal user):**
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
+irm https://raw.githubusercontent.com/thisisforlearn/nekoclaw/main/install.ps1 | iex
+```
+
+**Android Termux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/thisisforlearn/nekoclaw/main/install-termux.sh | bash
+# pkg update, clang, rust, tries nekoclaw-termux-aarch64 or builds, --tt-log2 20 for 2GB RAM
+```
+
+All show `▓ [█████····]  60%` bar at bottom via `curl --progress-bar` / `cargo` spinner + `tput`. Safe: writes only to `./build`, `~/.local/bin`, `~/.cargo`.
+
+---
+
+## Nerd Edition — everything in detail
+
+```bash
+# Build
+cmake -S engine -B build -DCMAKE_BUILD_TYPE=Release -DUSE_AVX2=ON && cmake --build build -j
+cargo build --release --manifest-path tui/Cargo.toml  # 1.5M TUI
+# Bench (real, not fake)
+./build/nekoclaw bench  # perft 6 119M + search
+./build/perft  # perft 1-6 OK
+# Training UI (normal person)
+python scripts/train_ui.py --size 500 --mode transfer  # 50/100/500MB/1GB/5GB/custom, shows time estimate via bench nps
+python scripts/train_ui.py --size 1000 --mode scratch
+# Manual training
+PYTHONPATH=trainer:$PYTHONPATH python -m nekoclaw_trainer.train --config trainer/configs/default.yaml
+# Nerd fix + sharing
+python scripts/nerd.py        # checks perft, missing build/data, auto-fixes
+python scripts/share.py --ckpt checkpoints/best.pt --data-mb 500  # estimates Elo, pushes to GitHub weights/
+```
+
+---
+
+## Common Errors & Fixes
+
+| Error | Fix |
+|-------|-----|
+| `ModuleNotFoundError: nekoclaw_trainer` | `PYTHONPATH=trainer:$PYTHONPATH python -m nekoclaw_trainer.train ...` or `pip install -e trainer` (needs setup.py) |
+| `Weights only load failed` / `weights_only` | `trainer/nekoclaw_trainer/export.py` already uses `weights_only=False` (PyTorch 2.6) — pull latest |
+| `f`/`c` flip not working, pieces small | `cd ~/nekoclaw && git pull && cd tui && cargo build --release` — you had old `1.4M` binary, new is `1.5M` with `f`/`c` |
+| `e4 unknown` | Use `e4`/`Nf3`/`O-O` now works (SAN) or `e2e4` (UCI) — old console needed `move e2e4` |
+| `perft 5 FAIL` | Fixed `pawn double-push evasion` + `en-passant` + `ep square` — pull latest, `cmake --build build -j` |
+| `Ctrl+C` doesn't save | `kill -USR1 $(pgrep -f nekoclaw_trainer.train)` saves lossless (`last.pt`); `Ctrl+C` now also saves after patch |
+| `RAM 4.7GB` swap even with free | `swappiness 60` normal — `mmap 577MB` + `8.3M` shuffle list, not OOM |
+| `2.6s/it` on `2×T4` slow | Set `trainer/train.py` `num_workers=4 pin_memory=True` for GPU (was `0/False` for CPU) |
+| `FileNotFoundError: data/train.bin` | `!mkdir -p data` before `open` — fixed |
+| `No such file scripts/nekoclaw_gui.py` | Now `scripts/web_gui.py` (web) + `tui/` (Rust) — use `python scripts/web_gui.py` |
+| `gh: command not found` | `sudo apt install gh && gh auth login` or use PAT `git push https://<PAT>@github.com/...` |
+| `HF unauthenticated` slow | Kaggle `Settings` → `Secrets` → `HF_TOKEN` from `huggingface.co/settings/tokens` |
 
 ---
 
