@@ -307,8 +307,8 @@ fn compute_geom(total: Rect) -> BoardGeom {
     let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(80), Constraint::Percentage(20)]).split(board_container);
     let board_area = chunks[0];
     // cell size: at least 7x3 or 9x4, auto-scale
-    let cell_w = ((board_area.width.saturating_sub(6) / 8).max(7).min(11)) as u16;
-    let cell_h = ((board_area.height.saturating_sub(6) / 8).max(3).min(5)) as u16;
+    let cell_w = ((board_area.width.saturating_sub(6) / 8).max(7).min(13)) as u16;
+    let cell_h = ((board_area.height.saturating_sub(6) / 8).max(3).min(6)) as u16;
     let board_w = cell_w * 8;
     let board_h = cell_h * 8;
     let left = board_area.x + board_area.width.saturating_sub(board_w)/2;
@@ -481,8 +481,8 @@ fn main() -> io::Result<()> {
                 let stats_area = chunks[1];
 
                 // Compute geometry matching main compute_geom
-                let cell_w = (board_area.width.saturating_sub(6) / 8).max(7).min(11);
-                let cell_h = (board_area.height.saturating_sub(6) / 8).max(3).min(5);
+                let cell_w = (board_area.width.saturating_sub(6) / 8).max(7).min(13);
+                let cell_h = (board_area.height.saturating_sub(6) / 8).max(3).min(6);
                 let board_w = cell_w * 8;
                 let board_h = cell_h * 8;
                 let board_left = board_area.x + board_area.width.saturating_sub(board_w)/2;
