@@ -320,6 +320,9 @@ fn main() -> io::Result<()> {
     let mut board = Chess::default();
     let mut history: Vec<Chess> = Vec::new();
     let mut selected: Option<Square> = None;
+    let mut flipped = false;
+    let mut player_color = ChessColor::White;
+    let mut show_help = false;
     let mut last_move: Option<Move> = None;
     let mut status = String::from("🐾 Click piece → destination  •  Type SAN: e4 Nf3 O-O  Enter  •  q quit  n new  u undo");
     let mut input_buf = String::new();
@@ -538,13 +541,14 @@ fn main() -> io::Result<()> {
                 let check_king = if board_clone.is_check() { board_clone.board().king_of(board_clone.turn()) } else { None };
 
                 for r in 0..8 {
-                    let rank = 8 - r;
+                    let rank = if flipped { r+1 } else { 8 - r };
                     let y0 = board_top + r as u16 * cell_h;
                     // Rank left
                     f.render_widget(Paragraph::new(format!("{:>2}", rank)).style(Style::default().fg(COORD).add_modifier(Modifier::BOLD)), Rect { x: board_left.saturating_sub(3), y: y0 + cell_h/2, width: 2, height: 1 });
                     for file in 0..8 {
+                        let disp_file = if flipped { 7 - file } else { file };
                         let x0 = board_left + file as u16 * cell_w;
-                        let sq = Square::from_coords(File::try_from(file as u8).unwrap(), Rank::try_from((rank-1) as u8).unwrap());
+                        let sq = Square::from_coords(File::try_from(disp_file as u8).unwrap(), Rank::try_from((rank-1) as u8).unwrap());
                         let is_light = (file as u8 + (rank as u8)) % 2 == 0; // h1 light (7+1=8 even)
                         let mut bg = if is_light { LIGHT } else { DARK };
                         let mut is_hl = false;
@@ -632,7 +636,7 @@ fn main() -> io::Result<()> {
                 }
                 // Files bottom
                 let mut bot = String::new();
-                for file in 0..8 { bot.push_str(&format!("{:^w$}", (b'a'+file) as char, w=cell_w as usize)); }
+                for file in 0..8 { let disp_file = if flipped { 7 - file } else { file }; bot.push_str(&format!("{:^w$}", (b'a'+disp_file as u8) as char, w=cell_w as usize)); }
                 f.render_widget(Paragraph::new(bot).style(Style::default().fg(COORD)), Rect { x: board_left, y: board_top+board_h, width: board_w, height: 1 });
 
                 // Stats — super colorful
@@ -805,8 +809,10 @@ fn main() -> io::Result<()> {
                                 if engine_thinking {
                                     status = "😺 Neko is thinking… wait!".into();
                                 } else {
-                                    let file = (m.column - geom.left) / geom.cell_w;
-                                    let rank = 8 - (m.row - geom.top) / geom.cell_h;
+                                    let file_disp = (m.column - geom.left) / geom.cell_w;
+                                    let rank_disp = 8 - (m.row - geom.top) / geom.cell_h;
+                                    let file = if flipped { 7 - file_disp } else { file_disp };
+                                    let rank = if flipped { 9 - rank_disp } else { rank_disp };
                                     if file < 8 && rank >= 1 && rank <= 8 {
                                         let sq = Square::from_coords(File::try_from(file as u8).unwrap(), Rank::try_from((rank-1) as u8).unwrap());
                                         if selected.is_none() {
