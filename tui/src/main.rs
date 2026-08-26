@@ -245,10 +245,11 @@ fn engine_thread(mut stdin: ChildStdin, stdout: ChildStdout, cmd_rx: Receiver<En
 fn try_san(board: &Chess, input: &str) -> Option<Move> {
     let s = input.trim();
     if s.is_empty() { return None; }
-    // Normalize castling: allow 0-0, 0-0-0
+    // Normalize castling: allow 0-0, 0-0-0, o-o, o-o-o (case-insensitive)
     let mut norm = s.to_string();
-    if norm == "0-0" { norm = "O-O".into(); }
-    if norm == "0-0-0" { norm = "O-O-O".into(); }
+    let lower = norm.to_ascii_lowercase();
+    if lower == "0-0" || lower == "o-o" { norm = "O-O".into(); }
+    else if lower == "0-0-0" || lower == "o-o-o" { norm = "O-O-O".into(); }
     // Try SAN first
     if let Ok(san) = San::from_ascii(norm.as_bytes()) {
         if let Ok(mv) = san.to_move(board) {
