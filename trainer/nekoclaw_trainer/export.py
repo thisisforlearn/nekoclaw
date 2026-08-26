@@ -9,7 +9,7 @@ VERSION = 1
 ARCH = 0x10240408
 
 def export(ckpt_path, out_path):
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     state = ckpt["model"] if "model" in ckpt else ckpt
     net = NekoClawNet()
     # handle DDP prefix
