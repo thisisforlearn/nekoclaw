@@ -54,45 +54,93 @@ fn main() -> io::Result<()> {
     loop {
         terminal.draw(|f| {
             let area = f.area();
-            let outer = Block::default().borders(Borders::ALL).title("🐾 NekoClaw v1.0.0 — Vaibhav | Click to move | SAN e4/Nf3/O-O also typed").border_type(BorderType::Rounded);
+            // Auto-scale: use 90% of area, centered
+            let outer = Block::default().borders(Borders::ALL)
+                .title("🐾 NekoClaw v1.0.0 — Vaibhav | the cutest chess engine | Click to move")
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(ratatui::style::Color::Magenta));
             f.render_widget(outer, area);
             let inner = Rect { x: area.x+1, y: area.y+1, width: area.width-2, height: area.height-2 };
-            // Board at (4,2) inside inner, 8x8 each cell 3x1
-            let board_left = inner.x + 2;
-            let board_top = inner.y + 1;
-            // Header
-            let header = Paragraph::new(status.clone()).style(Style::default().fg(ratatui::style::Color::Magenta));
+            // Layout: left board (70%), right stats (30%), both auto-scale to height
+            let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(70), Constraint::Percentage(30)]).split(inner);
+            let board_area = chunks[0];
+            let stats_area = chunks[1];
+
+            // Board size: auto-scale to fit board_area, each square 5x2 for big, colorful
+            let cell_w: u16 = (board_area.width.saturating_sub(6) / 8).max(3).min(7);
+            let cell_h: u16 = (board_area.height.saturating_sub(4) / 8).max(1).min(3);
+            // Center board
+            let board_w = cell_w * 8;
+            let board_h = cell_h * 8;
+            let board_left = board_area.x + (board_area.width.saturating_sub(board_w))/2;
+            let board_top = board_area.y + 2 + (board_area.height.saturating_sub(board_h+4))/2;
+
+            // Header status with color
+            let header = Paragraph::new(status.clone()).style(Style::default().fg(ratatui::style::Color::Cyan).add_modifier(Modifier::BOLD));
             f.render_widget(header, Rect{x: inner.x, y: inner.y, width: inner.width, height: 1});
-            // Coords top
+
+            // Coordinates top
             let mut top = String::from("   ");
-            for file in 0..8 { top.push_str(&format!(" {} ", (b'a'+file) as char)); }
-            f.render_widget(Paragraph::new(top), Rect{x: board_left, y: board_top-1, width: 30, height: 1});
+            for file in 0..8 { top.push_str(&format!("{:^w$}", (b'a'+file) as char, w=cell_w as usize)); }
+            f.render_widget(Paragraph::new(top).style(Style::default().fg(ratatui::style::Color::Yellow)), Rect{x: board_left, y: board_top-1, width: board_w, height: 1});
+
             for r in 0..8 {
                 let rank = 8 - r;
-                let y = board_top + r as u16;
-                // rank number
-                f.render_widget(Paragraph::new(format!("{}", rank)), Rect{x: board_left-2, y, width: 2, height: 1});
+                let y = board_top + r as u16 * cell_h;
+                // Rank left/right
+                f.render_widget(Paragraph::new(format!("{:>2}", rank)).style(Style::default().fg(ratatui::style::Color::Yellow)), Rect{x: board_left-2, y: y + cell_h/2, width: 2, height: 1});
                 for file in 0..8 {
-                    let x = board_left + file*3;
+                    let x = board_left + file as u16 * cell_w;
                     let sq = Square::from_coords(shakmaty::File::try_from(file as u8).unwrap(), shakmaty::Rank::try_from((rank-1) as u8).unwrap());
                     let is_dark = (file + rank) %2 ==0;
-                    let mut style = if is_dark { Style::default().bg(ratatui::style::Color::Rgb(80,100,150)) } else { Style::default().bg(ratatui::style::Color::Rgb(230,230,230)) };
+                    // More colorful: dark squares deep blue, light cream, like nekoline BOARD_BLUE
+                    let mut style = if is_dark { Style::default().bg(ratatui::style::Color::Rgb(30,80,160)).fg(ratatui::style::Color::White) } else { Style::default().bg(ratatui::style::Color::Rgb(240,217,181)).fg(ratatui::style::Color::Black) };
                     if Some(sq) == selected {
-                        style = Style::default().bg(ratatui::style::Color::Yellow).fg(ratatui::style::Color::Black);
+                        style = Style::default().bg(ratatui::style::Color::Rgb(255,215,0)).fg(ratatui::style::Color::Black).add_modifier(Modifier::BOLD);
                     }
-                    // Last move highlight via move_stack below
+                    let piece = board.board().piece_at(sq);
                     let txt = piece_unicode(board.board(), sq);
-                    let cell = Paragraph::new(txt).style(style);
-                    f.render_widget(cell, Rect{x, y, width: 3, height: 1});
+                    // White pieces pure white, black pure black (not different color)
+                    let fg = match piece {
+                        Some(p) if p.color == ChessColor::White => ratatui::style::Color::White,
+                        Some(p) if p.color == ChessColor::Black => ratatui::style::Color::Black,
+                        _ => ratatui::style::Color::Reset,
+                    };
+                    // Center piece in cell
+                    for dy in 0..cell_h {
+                        let content = if dy == cell_h/2 { format!("{:^w$}", txt.trim(), w=cell_w as usize) } else { " ".repeat(cell_w as usize) };
+                        let mut cell_style = style;
+                        if dy != cell_h/2 {
+                            cell_style = style.fg(ratatui::style::Color::Reset);
+                        } else {
+                            cell_style = style.fg(fg).add_modifier(Modifier::BOLD);
+                        }
+                        f.render_widget(Paragraph::new(content.clone()).style(cell_style), Rect{x, y: y+dy, width: cell_w, height: 1});
+                    }
                 }
-                f.render_widget(Paragraph::new(format!(" {}", rank)), Rect{x: board_left+24, y, width: 2, height: 1});
+                f.render_widget(Paragraph::new(format!(" {}", rank)).style(Style::default().fg(ratatui::style::Color::Yellow)), Rect{x: board_left+board_w, y: y + cell_h/2, width: 2, height: 1});
             }
-            f.render_widget(Paragraph::new("   a  b  c  d  e  f  g  h"), Rect{x: board_left, y: board_top+8, width: 30, height: 1});
-            let fen = Fen::from_position(&board.clone(), shakmaty::EnPassantMode::Legal).to_string();
-            f.render_widget(Paragraph::new(format!("FEN: {}", fen)), Rect{x: inner.x, y: board_top+9, width: inner.width, height: 1});
-            let turn = if board.turn() == ChessColor::White { "White" } else { "Black" };
-            let check = if board.is_check() { " + check" } else { "" };
-            f.render_widget(Paragraph::new(format!("Side: {}{} | {} to move", turn, check, turn)), Rect{x: inner.x, y: board_top+10, width: inner.width, height: 1});
+            f.render_widget(Paragraph::new(format!("{:^w$}", "a  b  c  d  e  f  g  h", w=board_w as usize)).style(Style::default().fg(ratatui::style::Color::Yellow)), Rect{x: board_left, y: board_top+board_h, width: board_w, height: 1});
+
+            // Right stats panel - engine stats, colorful
+            let stats_block = Block::default().borders(Borders::ALL).title(" Engine ").border_type(BorderType::Rounded).border_style(Style::default().fg(ratatui::style::Color::Green));
+            f.render_widget(stats_block, stats_area);
+            let stats_inner = Rect{x: stats_area.x+1, y: stats_area.y+1, width: stats_area.width-2, height: stats_area.height-2};
+            let fen = Fen::from_position(&board, shakmaty::EnPassantMode::Legal).to_string();
+            let turn = if board.turn() == ChessColor::White { "White ♔" } else { "Black ♚" };
+            let check = if board.is_check() { " ☠️ CHECK!" } else { "" };
+            let stats_text = vec![
+                Line::from(vec![Span::styled("Side: ", Style::default().fg(ratatui::style::Color::Cyan)), Span::styled(format!("{}{}", turn, check), Style::default().fg(ratatui::style::Color::Yellow).add_modifier(Modifier::BOLD))]),
+                Line::from(""),
+                Line::from(vec![Span::styled("Eval: ", Style::default().fg(ratatui::style::Color::Cyan)), Span::styled("0 cp", Style::default().fg(ratatui::style::Color::White))]),
+                Line::from(vec![Span::styled("Depth: ", Style::default().fg(ratatui::style::Color::Cyan)), Span::raw("12")]),
+                Line::from(vec![Span::styled("Nodes: ", Style::default().fg(ratatui::style::Color::Cyan)), Span::raw("0")]),
+                Line::from(vec![Span::styled("NPS: ", Style::default().fg(ratatui::style::Color::Cyan)), Span::raw("0")]),
+                Line::from(""),
+                Line::from(Span::styled("FEN:", Style::default().fg(ratatui::style::Color::Magenta))),
+                Line::from(fen.chars().collect::<Vec<_>>().chunks(30).map(|c| c.iter().collect::<String>()).collect::<Vec<_>>().join("\n")),
+            ];
+            f.render_widget(Paragraph::new(stats_text).wrap(Wrap{trim: false}), stats_inner);
         })?;
 
         // Poll event with timeout to avoid busy loop, handle Ctrl+C cleanly via crossterm
