@@ -45,7 +45,7 @@ def save_checkpoint(path, model, optimizer, scheduler, scaler, epoch, global_ste
     print(f"[ckpt] saved to {path} step {global_step}")
 
 def load_checkpoint(path, model, optimizer, scheduler, scaler):
-    ckpt = torch.load(path, map_location="cpu")
+    ckpt = torch.load(path, map_location="cpu", weights_only=False)
     # model may be DDP
     target = model.module if hasattr(model, "module") else model
     target.load_state_dict(ckpt["model"])
@@ -153,7 +153,7 @@ def main():
     if world_size > 1:
         model = DDP(model, device_ids=[local_rank])
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.get("lr", 2e-3), weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.get("max_steps", 1000000))
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=20260)
     scaler = torch.amp.GradScaler('cuda', enabled=config.get("amp", True) and device.type=="cuda")
     # Dataset — fast numpy shuffle keeps 16384 batch as you want, single worker for WSL2
     dataset = NekoBinDataset(config["data"], shuffle=True, seed=config.get("seed", 42), rank=rank, world_size=world_size)
