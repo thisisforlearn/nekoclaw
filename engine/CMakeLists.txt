@@ -99,6 +99,7 @@ set(SOURCES
 
 add_library(nekoclaw_lib STATIC ${SOURCES})
 target_include_directories(nekoclaw_lib PUBLIC ${NEKOC_IDIR} ${CMAKE_BINARY_DIR})
+include_directories(${NEKOC_IDIR} ${CMAKE_BINARY_DIR})
 if(NOT MSVC)
   target_link_libraries(nekoclaw_lib PUBLIC pthread)
 endif()
