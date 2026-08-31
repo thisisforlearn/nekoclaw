@@ -1,0 +1,32 @@
+name: Release Flex
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build C++ engine
+        run: |
+          cmake -S engine -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+      - name: Build TUI
+        run: cargo build --release --manifest-path tui/Cargo.toml
+      - name: Package flex Windows
+        run: |
+          mkdir nekoclaw-flex-win
+          copy build\Release\nekoclaw.exe nekoclaw-flex-win\
+          copy tui\target\release\nekoclaw-tui.exe nekoclaw-flex-win\
+          copy weights\nekoclaw-1024x8-scReLU.nnue nekoclaw-flex-win\ 2>nul || echo no nnue
+          powershell Compress-Archive -Path nekoclaw-flex-win -DestinationPath nekoclaw-flex-win.zip
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: nekoclaw-flex-win.zip
+          tag_name: v1.0.0-flex
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
